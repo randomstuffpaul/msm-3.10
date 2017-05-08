@@ -169,3 +169,7 @@ obj-$(CONFIG_ESOC)		+= esoc/
 obj-$(CONFIG_BIF)		+= bif/
 obj-$(CONFIG_SENSORS)		+= sensors/
 obj-$(CONFIG_SENSORS_SSC)	+= sensors/
+
+obj-$(CONFIG_CEI_HARDWARE_ID) += hwid/
+
+obj-$(CONFIG_SILEAD_DEVICE) += silead/
