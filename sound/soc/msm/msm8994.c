@@ -217,6 +217,7 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.use_vddio_meas = true,
 	.enable_anc_mic_detect = false,
 	.hw_jack_type = SIX_POLE_JACK,
+#ifndef CONFIG_MACH_PM9X
 	.key_code[0] = KEY_MEDIA,
 	.key_code[1] = KEY_VOICECOMMAND,
 	.key_code[2] = KEY_VOLUMEUP,
@@ -225,6 +226,16 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 	.key_code[5] = 0,
 	.key_code[6] = 0,
 	.key_code[7] = 0,
+#else
+	.key_code[0] = KEY_MEDIA,
+	.key_code[1] = 0,
+	.key_code[2] = 0,
+	.key_code[3] = 0,
+	.key_code[4] = 0,
+	.key_code[5] = KEY_VOLUMEUP,
+	.key_code[6] = 0,
+	.key_code[7] = KEY_VOLUMEDOWN,
+#endif
 };
 
 static struct afe_clk_cfg mi2s_tx_clk = {
