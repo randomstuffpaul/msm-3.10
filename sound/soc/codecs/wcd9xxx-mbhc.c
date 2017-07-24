@@ -153,6 +153,11 @@ MODULE_PARM_DESC(z_det_box_car_avg,
 
 static bool detect_use_vddio_switch;
 
+#ifdef CONFIG_MACH_PM9X
+static int jack_btn_detect;
+static int jack_btn_voltage;
+#endif
+
 struct wcd9xxx_mbhc_detect {
 	u16 dce;
 	u16 sta;
@@ -3507,6 +3512,11 @@ static int wcd9xxx_determine_button(const struct wcd9xxx_mbhc *mbhc,
 		}
 	}
 
+#ifdef CONFIG_MACH_PM9X
+	jack_btn_detect = btn;
+	jack_btn_voltage = micmv;
+#endif
+
 	if (btn == -1)
 		pr_debug("%s: couldn't find button number for mic mv %d\n",
 			 __func__, micmv);
@@ -5422,6 +5432,29 @@ int wcd9xxx_mbhc_get_impedance(struct wcd9xxx_mbhc *mbhc, uint32_t *zl,
 		return -EINVAL;
 }
 
+#ifdef CONFIG_MACH_PM9X
+#define SHOW(_name) \
+static ssize_t show_##_name (struct device *dev, struct device_attribute *attr, \
+                       char *buf) { \
+       return scnprintf(buf, PAGE_SIZE, "%d\n", _name); \
+} \
+static DEVICE_ATTR(_name, S_IRUGO, show_##_name, NULL);
+
+SHOW(jack_btn_detect)
+SHOW(jack_btn_voltage)
+
+static struct attribute *jack_attrs[] = {
+       &dev_attr_jack_btn_detect.attr,
+       &dev_attr_jack_btn_voltage.attr,
+       NULL,
+};
+
+static struct attribute_group jack_attr_group = {
+       .attrs = jack_attrs,
+       .name = "jack_btn_reading",
+};
+#endif
+
 /*
  * wcd9xxx_mbhc_init : initialize MBHC internal structures.
  *
@@ -5603,6 +5636,13 @@ int wcd9xxx_mbhc_init(struct wcd9xxx_mbhc *mbhc, struct wcd9xxx_resmgr *resmgr,
 					     1 << WCD9XXX_COND_HPH);
 
 	pr_debug("%s: leave ret %d\n", __func__, ret);
+
+#ifdef CONFIG_MACH_PM9X
+	ret = sysfs_create_group(kernel_kobj, &jack_attr_group);
+	if (ret)
+		pr_err("%s: sysfs_creation failed, ret=%d\n", __func__, ret);
+#endif
+
 	return ret;
 
 err_hphr_ocp_irq:

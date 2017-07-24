@@ -238,6 +238,30 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 #endif
 };
 
+#ifdef CONFIG_MACH_PM9X
+static DEFINE_MUTEX(mbhc_lock);
+static int btn_low_vals[WCD9XXX_MBHC_DEF_BUTTONS] = {
+	-50,
+	81,
+	83,
+	105,
+	149,
+	190,
+	291,
+	292,
+};
+static int btn_high_vals[WCD9XXX_MBHC_DEF_BUTTONS] = {
+	80,
+	82,
+	104,
+	148,
+	189,
+	291,
+	291,
+	600,
+};
+#endif
+
 static struct afe_clk_cfg mi2s_tx_clk = {
 	AFE_API_VERSION_I2S_CONFIG,
 	Q6AFE_LPASS_IBIT_CLK_1_P536_MHZ,
@@ -2675,6 +2699,9 @@ static void *def_codec_mbhc_cal(void)
 	struct wcd9xxx_mbhc_btn_detect_cfg *btn_cfg;
 	u16 *btn_low, *btn_high;
 	u8 *n_ready, *n_cic, *gain;
+#ifdef CONFIG_MACH_PM9X
+	int i;
+#endif
 
 	codec_cal = kzalloc(WCD9XXX_MBHC_CAL_SIZE(WCD9XXX_MBHC_DEF_BUTTONS,
 						WCD9XXX_MBHC_DEF_RLOADS),
@@ -2736,22 +2763,10 @@ static void *def_codec_mbhc_cal(void)
 	btn_low[7] = 681;
 	btn_high[7] = 690;
 #else
-	btn_low[0] = -50;
-	btn_high[0] = 80;
-	btn_low[1] = 81;
-	btn_high[1] = 82;
-	btn_low[2] = 83;
-	btn_high[2] = 104;
-	btn_low[3] = 105;
-	btn_high[3] = 148;
-	btn_low[4] = 149;
-	btn_high[4] = 189;
-	btn_low[5] = 190;
-	btn_high[5] = 291;
-	btn_low[6] = 291;
-	btn_high[6] = 291;
-	btn_low[7] = 292;
-	btn_high[7] = 600;
+	for (i = 0; i < WCD9XXX_MBHC_DEF_BUTTONS; i++) {
+		btn_low[i] = btn_low_vals[i];
+		btn_high[i] = btn_high_vals[i];
+	}
 #endif
 	n_ready = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg, MBHC_BTN_DET_N_READY);
 	n_ready[0] = 80;
@@ -2765,6 +2780,41 @@ static void *def_codec_mbhc_cal(void)
 
 	return codec_cal;
 }
+
+#ifdef CONFIG_MACH_PM9X
+static void adjust_mbhc_thresholds(int btn, int val)
+{
+	int i = 0;
+	bool increasing = val > btn_high_vals[btn];
+	mutex_lock(&mbhc_lock);
+	if (increasing) {
+		btn_high_vals[btn] = val;
+		for (i = btn + 1; i < WCD9XXX_MBHC_DEF_BUTTONS; i++) {
+			if (btn_low_vals[i] < btn_high_vals[i - 1]) {
+				btn_low_vals[i] = btn_high_vals[i - 1] + 1;
+				if (btn_high_vals[i] < btn_low_vals[i])
+					btn_high_vals[i] = btn_low_vals[i];
+				else
+					break;
+			}
+		}
+	} else {
+		btn_high_vals[btn] = val;
+		if (btn != WCD9XXX_MBHC_DEF_BUTTONS -1)
+			btn_low_vals[btn + 1] = val + 1;
+		for (i = btn - 1; i > -1; i--) {
+			if (btn_high_vals[i] < btn_low_vals[i + 1]) {
+				btn_low_vals[i + 1] = btn_high_vals[i] + 1;
+				if (btn_high_vals[i + 1] < btn_low_vals[i + 1])
+					btn_high_vals[i + 1] = btn_low_vals[i + 1];
+				else
+					break;
+			}
+		}
+	}
+	mutex_unlock(&mbhc_lock);
+}
+#endif
 
 static int msm_snd_hw_params(struct snd_pcm_substream *substream,
 			     struct snd_pcm_hw_params *params)
@@ -4086,6 +4136,74 @@ static int msm8994_prepare_us_euro(struct snd_soc_card *card)
 	return 0;
 }
 
+#ifdef CONFIG_MACH_PM9X
+#define STORE_BTN_HIGH(_num) \
+static ssize_t store_btn_##_num(struct device *dev, struct device_attribute *attr, \
+                          const char *buf, size_t count) \
+{ \
+	int input; \
+	if (kstrtoint(buf, 0, &input)) \
+		return -EINVAL; \
+	if (input < -50 || input > 1000) \
+		return -EINVAL; \
+	adjust_mbhc_thresholds(_num, input); \
+	return count; \
+}
+
+#define SHOW_BTN_HIGH(_num) \
+static ssize_t show_btn_##_num(struct device *dev, struct device_attribute *attr, \
+			char *buf) { \
+	return scnprintf(buf, PAGE_SIZE, "%d\n", btn_high_vals[_num]); \
+}
+
+#define SHOW_BTN_KEYCODE(_num) \
+static ssize_t show_btn_keycode_##_num(struct device *dev, struct device_attribute *attr, \
+			char *buf) { \
+	return scnprintf(buf, PAGE_SIZE, "%d\n", mbhc_cfg.key_code[_num]); \
+}
+
+#define SHOW_BTN(_num) \
+STORE_BTN_HIGH(_num) \
+SHOW_BTN_HIGH(_num) \
+SHOW_BTN_KEYCODE(_num) \
+static DEVICE_ATTR(btn_##_num, S_IRUGO | S_IWUSR, show_btn_##_num, store_btn_##_num); \
+static DEVICE_ATTR(btn_keycode_##_num, S_IRUGO, show_btn_keycode_##_num, NULL);
+
+SHOW_BTN(0)
+SHOW_BTN(1)
+SHOW_BTN(2)
+SHOW_BTN(3)
+SHOW_BTN(4)
+SHOW_BTN(5)
+SHOW_BTN(6)
+SHOW_BTN(7)
+
+static struct attribute *btn_attrs[] = {
+	&dev_attr_btn_0.attr,
+	&dev_attr_btn_keycode_0.attr,
+	&dev_attr_btn_1.attr,
+	&dev_attr_btn_keycode_1.attr,
+	&dev_attr_btn_2.attr,
+	&dev_attr_btn_keycode_2.attr,
+	&dev_attr_btn_3.attr,
+	&dev_attr_btn_keycode_3.attr,
+	&dev_attr_btn_4.attr,
+	&dev_attr_btn_keycode_4.attr,
+	&dev_attr_btn_5.attr,
+	&dev_attr_btn_keycode_5.attr,
+	&dev_attr_btn_6.attr,
+	&dev_attr_btn_keycode_6.attr,
+	&dev_attr_btn_7.attr,
+	&dev_attr_btn_keycode_7.attr,
+	NULL,
+};
+
+static struct attribute_group btn_attr_group = {
+	.attrs = btn_attrs,
+	.name = "jack_btn_tuning",
+};
+#endif
+
 static int msm8994_asoc_machine_probe(struct platform_device *pdev)
 {
 	struct snd_soc_card *card = &snd_soc_card_msm8994;
@@ -4269,6 +4387,12 @@ static int msm8994_asoc_machine_probe(struct platform_device *pdev)
 				__func__, ret);
 		goto err1;
 	}
+
+#ifdef CONFIG_MACH_PM9X
+	ret = sysfs_create_group(kernel_kobj, &btn_attr_group);
+	if (ret)
+		pr_err("%s: sysfs_creation failed, ret=%d\n", __func__, ret);
+#endif
 
 	return 0;
 
