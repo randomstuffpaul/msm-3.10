@@ -58,7 +58,11 @@
 #define I2S_MASTER_SEL        0
 #define I2S_SLAVE_SEL         1
 
+#ifndef CONFIG_MACH_PM9X
 #define WCD9XXX_MBHC_DEF_BUTTONS    8
+#else
+#include <sound/mbhc_tuner.h>
+#endif
 #define WCD9XXX_MBHC_DEF_RLOADS     5
 #define TOMTOM_EXT_CLK_RATE         9600000
 #define ADSP_STATE_READY_TIMEOUT_MS    3000
@@ -240,7 +244,7 @@ static struct wcd9xxx_mbhc_config mbhc_cfg = {
 
 #ifdef CONFIG_MACH_PM9X
 static DEFINE_MUTEX(mbhc_lock);
-static int btn_low_vals[WCD9XXX_MBHC_DEF_BUTTONS] = {
+int btn_low_vals[WCD9XXX_MBHC_DEF_BUTTONS] = {
 	-50,
 	81,
 	83,
@@ -250,7 +254,7 @@ static int btn_low_vals[WCD9XXX_MBHC_DEF_BUTTONS] = {
 	291,
 	292,
 };
-static int btn_high_vals[WCD9XXX_MBHC_DEF_BUTTONS] = {
+int btn_high_vals[WCD9XXX_MBHC_DEF_BUTTONS] = {
 	80,
 	82,
 	104,
@@ -2697,11 +2701,10 @@ static void *def_codec_mbhc_cal(void)
 {
 	void *codec_cal;
 	struct wcd9xxx_mbhc_btn_detect_cfg *btn_cfg;
+#ifndef CONFIG_MACH_PM9X
 	u16 *btn_low, *btn_high;
-	u8 *n_ready, *n_cic, *gain;
-#ifdef CONFIG_MACH_PM9X
-	int i;
 #endif
+	u8 *n_ready, *n_cic, *gain;
 
 	codec_cal = kzalloc(WCD9XXX_MBHC_CAL_SIZE(WCD9XXX_MBHC_DEF_BUTTONS,
 						WCD9XXX_MBHC_DEF_RLOADS),
@@ -2742,10 +2745,10 @@ static void *def_codec_mbhc_cal(void)
 	S(v_btn_press_delta_cic, 50);
 #undef S
 	btn_cfg = WCD9XXX_MBHC_CAL_BTN_DET_PTR(codec_cal);
+#ifndef CONFIG_MACH_PM9X
 	btn_low = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg, MBHC_BTN_DET_V_BTN_LOW);
 	btn_high = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg,
 					       MBHC_BTN_DET_V_BTN_HIGH);
-#ifndef CONFIG_MACH_PM9X
 	btn_low[0] = -50;
 	btn_high[0] = 90;
 	btn_low[1] = 130;
@@ -2762,11 +2765,6 @@ static void *def_codec_mbhc_cal(void)
 	btn_high[6] = 680;
 	btn_low[7] = 681;
 	btn_high[7] = 690;
-#else
-	for (i = 0; i < WCD9XXX_MBHC_DEF_BUTTONS; i++) {
-		btn_low[i] = btn_low_vals[i];
-		btn_high[i] = btn_high_vals[i];
-	}
 #endif
 	n_ready = wcd9xxx_mbhc_cal_btn_det_mp(btn_cfg, MBHC_BTN_DET_N_READY);
 	n_ready[0] = 80;

@@ -154,6 +154,7 @@ MODULE_PARM_DESC(z_det_box_car_avg,
 static bool detect_use_vddio_switch;
 
 #ifdef CONFIG_MACH_PM9X
+#include <sound/mbhc_tuner.h>
 static int jack_btn_detect;
 static int jack_btn_voltage;
 #endif
@@ -3495,6 +3496,7 @@ static int wcd9xxx_is_false_press(struct wcd9xxx_mbhc *mbhc)
 static int wcd9xxx_determine_button(const struct wcd9xxx_mbhc *mbhc,
 				  const s32 micmv)
 {
+#ifndef CONFIG_MACH_PM9X
 	s16 *v_btn_low, *v_btn_high;
 	struct wcd9xxx_mbhc_btn_detect_cfg *btn_det;
 	int i, btn = -1;
@@ -3511,8 +3513,15 @@ static int wcd9xxx_determine_button(const struct wcd9xxx_mbhc *mbhc,
 			break;
 		}
 	}
+#else
+	int i, btn = -1;
+	for (i = 0; i < WCD9XXX_MBHC_DEF_BUTTONS; i++) {
+		if ((btn_low_vals[i] <= micmv) && (btn_high_vals[i] >= micmv)) {
+			btn = i;
+			break;
+		}
+	}
 
-#ifdef CONFIG_MACH_PM9X
 	jack_btn_detect = btn;
 	jack_btn_voltage = micmv;
 #endif
